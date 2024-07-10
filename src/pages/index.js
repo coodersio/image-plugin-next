@@ -2,10 +2,60 @@ import Head from "next/head";
 import Image from "next/image";
 import { Inter } from "next/font/google";
 import styles from "@/styles/Home.module.css";
-
+import Vips from 'wasm-vips';
+import {useEffect, useState} from "react";
 const inter = Inter({ subsets: ["latin"] });
 
 export default function Home() {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    Vips({
+      // Disable dynamic modules
+      dynamicLibraries: [],
+      // Workers needs to import the unbundled version of `vips.js`
+      mainScriptUrlOrBlob: './vips.js',
+      // wasm-vips is served from the public directory
+      locateFile: (fileName, scriptDirectory) => fileName,
+      preRun:(module) => {
+        module.setAutoDeleteLater(!document.referrer.includes('disableAutoDelete'));
+        module.setDelayFunction((fn) => {
+          globalThis.cleanup = fn;
+        });
+        const images = [
+          'owl.jpg', 'owl.tif', 'owl.webp', 'owl.jxl', 'owl.avif',
+          'banana.webp', 'banana.gif',
+          'alphachannel.svg', 'transparency_demo.png'
+        ];
+        for (const image of images)
+          module.FS.createPreloadedFile('/', image, '/images/' + image, true, false);
+
+      }
+    }).then((vips) => {
+      console.log('libvips version:', vips.version());
+
+      // let im = vips.Image.newFromBuffer(Buffer.from([255, 0, 0, 255]));
+      let im = vips.Image.newFromFile('owl.jpg');
+      im = im.embed(100, 100, 3000, 3000, {
+        extend: 'mirror'
+      });
+      im = im.multiply([1, 2, 1]);
+      const mask = vips.Image.newFromArray([
+        [-1, -1, -1],
+        [-1, 16, -1],
+        [-1, -1, -1]
+      ], 8.0);
+
+      im = im.conv(mask, {
+        precision: 'integer'
+      });
+
+      const outBuffer = im.writeToBuffer('.jpg');
+      const blob = new Blob( [ outBuffer ] );
+      const url = URL.createObjectURL( blob );
+      setUrl(url)
+      console.log(outBuffer)
+    });
+  }, []);
   return (
     <>
       <Head>
@@ -15,6 +65,8 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <main className={`${styles.main} ${inter.className}`}>
+        <img src={url} alt=""/>
+        {url}
         <div className={styles.description}>
           <p>
             Get started by editing&nbsp;
